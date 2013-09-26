@@ -11,10 +11,12 @@
 			this.$input_name = $('#input-name');
 			this.$input_message = $('#input-text');
 			this.$comments_list = $('#comment_list');
+			this.$comments_count = $('#comment_count');
 
 			this.listenTo(this.collection, 'add', this.createView);
-			// Fetch contacts from server
-			//this.collection.fetch();
+			this.listenTo(this.collection, 'add remove', this.updateCounter);
+			
+			this.collection.fetch();
 		},
 
 		clearInputs: function () {
@@ -30,8 +32,7 @@
 		addOneComment: function(evt) {
 			evt.preventDefault();
 			var _this = this;
-			
-			console.log(this.$input_name.val() + ':' +this.$input_message.val());
+
 			var comment = new CommentModel({
 				author: this.$input_name.val(),
 				message: this.$input_message.val(),
@@ -48,16 +49,20 @@
 			});
 			
 		},
+		updateCounter: function(){
+			this.$comments_count.text(this.collection.length);
+		},
 
-		createView: function (model, collection) {
-			//model.set('like', 0);
+		createView: function (model, collection) {			
 			var view = new CommentView({model: model});
 			this.$comments_list.append(view.render().el);
+			this.$comments_list.append(view.render().el);		
 			this.clearInputs();
 		}			
 	});
 
 	var CommentModel = Backbone.Model.extend({
+		
 		initialize: function() {
 			//this.on('add', this.addHandler, this);
 		},		
@@ -71,80 +76,74 @@
 			time_elapsed: '-'
 		},
 
-		validate: function(attributes) {
-			var errors = [];
-
-			if (attributes.text === "") {
-				return 'Insert a text for the comment';
-			}
-
-			if (errors.length !== 0) {
-				return errors;
-			}
-		},
-
-		urlRoot: 'http://localhost:9090/comments',
-
-		addHandler: function() {
-			if (this.isNew()) {
-				this.set({
-					date: new Date()
-				});
-			}			
-		},
-
-		addLike: function() {
-			var likeN = this.get('like') - 0;
-			likeN++;
-			this.set({
-				like: likeN
-			});
+		url: function () {
+			var location = 'http://localhost:9090/comments';
+			return this.id ? (location + '/' + this.id) : location;
 		}
 
 	});
 
-var CommentCollection = Backbone.Collection.extend({
-	model: CommentModel,
-	// The url to call for any interaction with the server
-	url: 'http://localhost:9090/comments'
-});
+	var CommentCollection = Backbone.Collection.extend({
+		model: CommentModel,
+		// The url to call for any interaction with the server
+		url: 'http://localhost:9090/comments'
+	});
 
-var CommentView = Backbone.View.extend({
-	tagName: 'li',
-	template: $('#comment_template').html(),
-	events: {
-		'click .upvote': 'upvote',
-		'click .delete': 'remove'
-	},
+	var CommentView = Backbone.View.extend({
+		tagName: 'li',
+		template: $('#comment-template').html(),
+		templateEdit: _.template($('#comment_count').html()),
+		events: {
+			'click .upvote': 'upvote',
+			'click .delete': 'deleteFromDatabase'
+		},
 
+		initialize: function() {
+			this.listenTo(this.model, 'destroy', this.removeView);
+			//this.listenTo(this.model, 'change', this.render);
 
-	initialize: function() {
-		this.listenTo(this.model, 'destroy', this.removeView);
+		},
 
-		this.listenTo(this.model, 'change', this.showDefaultView);
-	},
+		render: function() {
+			var compiled_template = _.template(this.template);
+			this.$el.html(compiled_template(this.model.toJSON()));
+			return this;
+		},
 
-	render: function() {
-		var compiledTemplate = _.template(this.template);
-		this.$el.html(compiledTemplate(this.model.toJSON()));
-		return this;
-	},
+		deleteFromDatabase: function () {
+			this.model.destroy({
+				wait: true,
+				success: function (model, resp, opt) {
+					console.log('model destroy success: ', model);
+				},
+				error: function (model, xhr, opt) {
+					console.log('model destroy error: ', model);
+				}
+			})
+		},		
 
-	upvote: function() {	
+		upvote: function() {	
+			var likeN = this.model.get('upvotes');
+			console.log(likeN);
+			likeN++;
+			//this.model.set('upvotes', 3);
 
-		this.model.addLike();		
+			this.model.save({
+				upvotes: likeN
+			});
+			this.render();
 
-		this.model.save();
-	},
+		},
 
-	remove: function() {
-		var that = this;
-		this.model.destroy();
-		this.$el.remove();
-	}
-});
+		removeView: function () {
+			this.undelegateEvents();
+			this.stopListening();
+			this.remove();
+		}
 
-var commentApp = new App({ collection: new CommentCollection() });
+	});
 
+	var commentApp = new App({ collection: new CommentCollection() });
 
+	window.app = commentApp;
 })(jQuery, Backbone, _)
