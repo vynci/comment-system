@@ -11,8 +11,10 @@
 			this.$input_name = $('#input-name');
 			this.$input_message = $('#input-text');
 			this.$comments_list = $('#comment_list');
+			this.$comments_count = $('#comment_count');
 
 			this.listenTo(this.collection, 'add', this.createView);
+			this.listenTo(this.collection, 'add remove', this.updateCounter);
 			
 			this.collection.fetch();
 		},
@@ -30,8 +32,7 @@
 		addOneComment: function(evt) {
 			evt.preventDefault();
 			var _this = this;
-			
-			console.log(this.$input_name.val() + ':' +this.$input_message.val());
+
 			var comment = new CommentModel({
 				author: this.$input_name.val(),
 				message: this.$input_message.val(),
@@ -48,11 +49,15 @@
 			});
 			
 		},
+		updateCounter: function(){
+			console.log(this.collection.length);
+			this.$comments_count.text(this.collection.length);
+		},
 
-		createView: function (model, collection) {
-			//model.set('like', 0);
+		createView: function (model, collection) {			
 			var view = new CommentView({model: model});
 			this.$comments_list.append(view.render().el);
+			this.$comments_list.append(view.render().el);		
 			this.clearInputs();
 		}			
 	});
@@ -74,6 +79,15 @@
 		url: function () {
 			var location = 'http://localhost:9090/comments';
 			return this.id ? (location + '/' + this.id) : location;
+		},
+
+		addLike: function() {
+			var likeN = this.get('upvotes') - 0;
+			likeN++;
+			this.set({
+				upvotes: likeN
+			});
+			console.log(likeN);
 		}
 	});
 
@@ -85,12 +99,12 @@
 
 	var CommentView = Backbone.View.extend({
 		tagName: 'li',
-		template: $('#comment_template').html(),
+		template: $('#comment-template').html(),
+		templateEdit: _.template($('#comment_count').html()),
 		events: {
 			'click .upvote': 'upvote',
-			'click .delete': 'remove'
+			'click .delete': 'deleteFromDatabase'
 		},
-
 
 		initialize: function() {
 			this.listenTo(this.model, 'destroy', this.removeView);
@@ -98,11 +112,24 @@
 		},
 
 		render: function() {
-			var compiledTemplate = _.template(this.template);
-			console.log(compiledTemplate);
-			this.$el.html(compiledTemplate(this.model.toJSON()));
+			var compiled_template = _.template(this.template);
+			this.$el.html(compiled_template(this.model.toJSON()));
 			return this;
 		},
+
+
+
+		deleteFromDatabase: function () {
+			this.model.destroy({
+				wait: true,
+				success: function (model, resp, opt) {
+					console.log('model destroy success: ', model);
+				},
+				error: function (model, xhr, opt) {
+					console.log('model destroy error: ', model);
+				}
+			})
+		},		
 
 		upvote: function() {	
 
@@ -115,10 +142,11 @@
 			this.undelegateEvents();
 			this.stopListening();
 			this.remove();
-		},
+		}
+
 	});
 
 	var commentApp = new App({ collection: new CommentCollection() });
 
-
+	window.app = commentApp;
 })(jQuery, Backbone, _)
